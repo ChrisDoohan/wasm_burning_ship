@@ -31,36 +31,18 @@
             font-weight: bold;
             margin-right: 10px;
         }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
     </style>
 </head>
 
 <body>
-    <div class="content-wrapper">
-        <div class="game-panel">
-            <div class="flex">
-                <div class="label">
-                    Status: 
-                </div>
-                <div id="game-status">
-                    Unset
-                </div>
-            </div>
-            <div class="flex">
-                <div class="label">
-                    Points: 
-                </div>
-                <div id="score">
-                    0
-                </div>
-            </div>
-            <div class="flex">
-                <button id="game-control-btn">
-                    Play
-                </button>
-            </div>
-        </div>
-        <canvas id="snake-canvas"></canvas>
-    </div>
+    <canvas id="fractal-canvas">
+    </canvas>
+
     <script src="./bootstrap.js">
     </script>
 </body>

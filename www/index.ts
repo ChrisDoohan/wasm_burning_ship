@@ -1,135 +1,150 @@
-import init, { World, Direction, GameStatus } from "snake_game";
-import {rnd} from "./utils/rnd";
+import init, { Generator } from "wasm_burning_ship";
+import { debug } from "webpack";
+import { iterationsToRainbowRGB } from "./utils/color";
+import PanZoom from "panzoom";
+
+
+interface Bounds {
+  xMin: number;
+  xMax: number;
+  yMin: number;
+  yMax: number;
+}
+
+interface FractalConfig {
+  iterationMax: number;
+  bounds: Bounds;
+}
 
 init().then((wasm) => {
-  const CELL_SIZE = 30; // px
-  const WORLD_WIDTH = 15;
-  const snakeSpawnIdx = rnd(WORLD_WIDTH * WORLD_WIDTH);
+  const canvas = <HTMLCanvasElement>document.getElementById("fractal-canvas");
+  const canvasContext = canvas.getContext("2d");
+  sizeCanvasToWindow();
 
-  const world = World.new(WORLD_WIDTH, snakeSpawnIdx);
-  const worldWidth = world.width();
-  const scoreDiv = document.getElementById("score");
-  const gameStatusDiv = document.getElementById("game-status");
-  const gameControlBtn = document.getElementById("game-control-btn");
-  const canvas = <HTMLCanvasElement> document.getElementById("snake-canvas");
-  const ctx = canvas.getContext("2d");
-  canvas.height = worldWidth * CELL_SIZE;
-  canvas.width = canvas.height;
+  // disable mouse wheel events
+  window.addEventListener("wheel", (e) => e.preventDefault(), { passive: false });
 
-  gameControlBtn.addEventListener("click", () => {
-    const gameStatus = world.game_status();
-    if (gameStatus === undefined) {
-      gameControlBtn.textContent = "Reload";
-      world.start_game();
-      play();
-    } else {
-      location.reload();
-    }
+
+  let panzoomInstance = PanZoom(canvas);
+  
+  panzoomInstance.on('panstart', function(e) {
+    console.log('Fired when pan is just started ', e);
+    // Note: e === instance.
+  });
+  
+  panzoomInstance.on('pan', function(e) {
+    console.log('Fired when the `element` is being panned', e);
+  });
+  
+  panzoomInstance.on('panend', function(e) {
+    console.log('Fired when pan ended', e);
+  });
+  
+  panzoomInstance.on('zoom', function(e) {
+    console.log('Fired when `element` is zoomed', e);
+  });
+  
+  panzoomInstance.on('zoomend', function(e) {
+    console.log('Fired when zoom animation ended', e);
+  });
+  
+  panzoomInstance.on('transform', function(e) {
+    // This event will be called along with events above.
+    console.log('Fired when any transformation has happened', e);
   });
 
-  const snakeCellPtr = world.snake_cells();
-  const snakeLen = world.snake_length();
+  const width = canvas.width;
+  const height = canvas.height;
+  const generator = Generator.new(width, height);
 
-  document.addEventListener("keydown", event => {
-    switch (event.code) {
-      case "ArrowUp":
-        world.change_snake_dir(Direction.Up);
-        break;
-      case "ArrowRight":
-        world.change_snake_dir(Direction.Right);
-        break;
-      case "ArrowDown":
-        world.change_snake_dir(Direction.Down);
-        break;
-      case "ArrowLeft":
-        world.change_snake_dir(Direction.Left);
-        break;
+  let iterationMax = 50;
+  let iterationMin = 0;
+
+  // set bounds
+  let bounds: Bounds = {
+    xMin: -3,
+    xMax: 0,
+    yMin: -.5,
+    yMax: 0.5,
+  };
+  let fractalConfig: FractalConfig = {
+    iterationMax,
+    bounds,
+  };
+  expandBoundsToMatchAspecRatio(bounds);
+  iterate(fractalConfig);
+
+  const rawIterationCounts = new Uint16Array(
+    wasm.memory.buffer,
+    generator.data_ptr(),
+    generator.data_len()
+  );
+
+  paintArrayToCanvas(rawIterationCounts, canvasContext);
+
+  function expandBoundsToMatchAspecRatio(bounds: Bounds) {
+    const aspectRatio = width / height;
+    const xRange = bounds.xMax - bounds.xMin;
+    const yRange = bounds.yMax - bounds.yMin;
+    const xRangeNew = yRange * aspectRatio;
+    const xRangeDiff = xRangeNew - xRange;
+    const xRangeHalf = xRangeDiff / 2;
+    bounds.xMin -= xRangeHalf;
+    bounds.xMax += xRangeHalf;
+  }
+
+  function iterate(config: FractalConfig) {
+    const { iterationMax, bounds } = config;
+    generator.generate(
+      bounds.xMin,
+      bounds.xMax,
+      bounds.yMin,
+      bounds.yMax,
+      iterationMax
+    );
+  }
+
+  function paintArrayToCanvas(
+    array: Uint16Array,
+    ctx: CanvasRenderingContext2D
+  ) {
+    if (array.length !== width * height) {
+      throw new Error("Array size does not match canvas size");
     }
-  });
 
-  paint();
+    const imageData = ctx.createImageData(width, height);
+    convertRawIterationArrayToImageArray(array, imageData.data);
 
+    ctx.putImageData(imageData, 0, 0);
+  }
 
-  function drawWorld() {
-    ctx.beginPath();
+  function convertRawIterationArrayToImageArray(
+    rawArray: Uint16Array,
+    imageArray: Uint8ClampedArray,
+    min?: number,
+    max?: number
+  ) {
+    const minIteration = min || iterationMin;
+    const maxIteration = max || iterationMax;
 
-    // Draw vertical lines
-    for (let x = 0; x < worldWidth + 1; x++) {
-      ctx.moveTo(x * CELL_SIZE, 0);
-      ctx.lineTo(x * CELL_SIZE, worldWidth * CELL_SIZE);
+    for (let i = 0; i < rawArray.length; i++) {
+      const iterations = rawArray[i];
+      const color = iterationsToRainbowRGB(
+        iterations,
+        minIteration,
+        maxIteration
+      );
+      const imageArrayIndex = i * 4;
+
+      imageArray[imageArrayIndex] = color.r;
+      imageArray[imageArrayIndex + 1] = color.g;
+      imageArray[imageArrayIndex + 2] = color.b;
+      imageArray[imageArrayIndex + 3] = 255;
     }
-
-    // Draw horizontal lines
-    for (let y = 0; y < worldWidth + 1; y++) {
-      ctx.moveTo(0, y * CELL_SIZE);
-      ctx.lineTo(worldWidth * CELL_SIZE, y * CELL_SIZE);
-    }
-
-    ctx.stroke();
   }
 
-  function drawGameStatus() {
-    gameStatusDiv.textContent = world.game_status_text();
-    scoreDiv.textContent = world.score().toString();
-  }
-
-  function paint() {
-    drawWorld();
-    drawSnake();
-    drawReward();
-    drawGameStatus();
-  }
-
-  function play() {
-    const fps = 15;
-    const status = world.game_status();
-    if (status == GameStatus.Won || status == GameStatus.Lost) {
-      gameControlBtn.textContent = "Replay";
-      return;
-    } 
-
-    setTimeout(() => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      world.step();
-      paint();
-      requestAnimationFrame(play);
-    }, 1000 / fps);
-
-    paint();
-  }
-
-  function drawReward() {
-    const rewardIdx = world.get_reward_cell();
-    const col = rewardIdx % worldWidth;
-    const row = Math.floor(rewardIdx / worldWidth);
-
-    ctx.beginPath();
-    ctx.fillStyle = "#00FF00";
-    ctx.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-    ctx.stroke();
-  }
-
-  function drawSnake() {
-    const snakeCells = new Uint32Array(wasm.memory.buffer, world.snake_cells(), world.snake_length());
-
-    snakeCells.forEach((wrldIdx, snakeCellIdx) => {
-      const col = wrldIdx % worldWidth;
-      const row = Math.floor(wrldIdx / worldWidth);
-
-      ctx.fillStyle = "green";
-      ctx.beginPath();
-      ctx.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-      ctx.stroke();
-    })
-
-    // Draw the head a different color. This is a differently-colored REdraw of the head
-    // square, over the head square drawn with the body color.
-    const headWorldIdx = snakeCells[0];
-    const headCol = headWorldIdx % worldWidth;
-    const headRow = Math.floor(headWorldIdx / worldWidth);
-    ctx.fillStyle = "black";
-    ctx.beginPath();
-    ctx.fillRect(headCol * CELL_SIZE, headRow * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-    ctx.stroke();
+  function sizeCanvasToWindow() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
   }
 });

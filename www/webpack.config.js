@@ -7,6 +7,11 @@ module.exports = {
     path: path.resolve(__dirname, "public"),
     filename: "bootstrap.js",
   },
+  devtool: "source-map",
+  resolve: {
+    // Add '.ts' and '.tsx' as resolvable extensions.
+    extensions: ["", ".webpack.js", ".web.js", ".ts", ".tsx", ".js"],
+  },
   mode: "development",
   module: {
     rules: [
@@ -15,6 +20,7 @@ module.exports = {
         use: 'ts-loader',
         exclude: /node_modules/,
       },
+      { test: /\.js$/, loader: "source-map-loader" },
     ],
   },
   plugins: [

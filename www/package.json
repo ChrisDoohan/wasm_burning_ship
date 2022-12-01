@@ -12,9 +12,10 @@
   "license": "ISC",
   "dependencies": {
     "copy-webpack-plugin": "^11.0.0",
-    "snake_game": "file:../pkg",
+    "panzoom": "^9.4.3",
     "ts-loader": "^9.4.1",
     "typescript": "^4.8.4",
+    "wasm_burning_ship": "file:../pkg",
     "webpack": "^5.74.0",
     "webpack-cli": "^4.10.0"
   },
